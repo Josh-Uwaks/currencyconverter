@@ -24,9 +24,7 @@ struct Data {
 
 #[derive(Deserialize, Debug)]
 struct Weather {
-    description: String,
-    icon: String,
-    code: u128
+    description: String
 }
 
 fn get_weather_info(longitude: &f64, latitude: &f64, api_key: &str) -> Result<WeatherResponse, reqwest::Error> {
@@ -49,12 +47,62 @@ fn get_weather_info(longitude: &f64, latitude: &f64, api_key: &str) -> Result<We
      .send()?
      .json::<WeatherResponse>()?;
 
-    println!("Raw Response: {:?}", response);
-
     Ok(response)
 
 }
 
+
+fn display_weather_info(response: &WeatherResponse) {
+    let description = &response.data[0].weather.description;
+    let city_name = &response.data[0].city_name;
+    let country_code = &response.data[0].country_code;
+    let temp = response.data[0].temp;
+    let timezone = &response.data[0].timezone;
+    let datetime = &response.data[0].datetime;
+
+    let weather_text = format!(
+        "description of weather: {}, {},
+        > Temperature: {:.2}°C, 
+        > country code: {}, 
+        > city name: {}, 
+        > timezone: {},
+        > datetime: {}",
+        description,
+        get_temperature_emoji(temp),
+        temp,
+        country_code,
+        city_name,
+        timezone,
+        datetime
+        );
+
+
+        // Coloring the weather text based on weather conditions
+    let weather_text_colored = match description.as_str() {
+        "clear sky" => weather_text.bright_yellow(),
+        "few clouds" | "scattered clouds" | "broken clouds" => weather_text.bright_blue(),
+        "overcast clouds" | "mist" | "haze" | "smoke" | "sand" | "dust" | "fog" | "squalls" => weather_text.dimmed(),
+        "shower rain" | "rain" | "thunderstorm" | "snow" => weather_text.bright_cyan(),
+        _ => weather_text.normal(),
+    };
+
+    println!("{}", weather_text_colored);
+
+}
+
+fn get_temperature_emoji(temperature: f64) -> &'static str {
+    if temperature < 0.0 {
+        "❄️"
+    } else if temperature >= 0.0 && temperature < 10.0 {
+        "☁️"
+    } else if temperature >= 10.0 && temperature < 20.0 {
+        "⛅"
+    } else if temperature >= 20.0 && temperature < 30.0 {
+        "🌤️"
+    } else {
+        "🔥"
+    }
+}
 
 fn main() {
     dotenv().ok();
@@ -94,19 +142,7 @@ fn main() {
 
         match get_weather_info(&longitude, &latitude, &api_key) {
             Ok(response) => {
-                println!("{}", "API Response".bright_yellow());
-                for data in response.data {
-                    println!(
-                        "City: {}, 
-                        Temperature: {:.2}°C, 
-                        country_code: {}, 
-                        datetime: {}, 
-                        timezone: {},
-                        weather: {}
-                        ",
-                        data.city_name, data.temp, data.country_code, data.datetime, data.timezone, data.weather.description
-                    )
-                }
+                display_weather_info(&response);
             }
             Err(err) => {
                 eprintln!("Error: {}", err);
