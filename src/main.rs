@@ -1,163 +1,84 @@
-use std::io;
+use std::io::{self, stdin};
+use reqwest::{blocking::Client, StatusCode};
 use serde::Deserialize;
-use reqwest::blocking::Client;
-use reqwest::header::{HeaderMap, HeaderValue};
 use dotenv::dotenv;
 use std::env;
 use colored::*;
 
-#[derive(Deserialize, Debug)]
-struct WeatherResponse {
-    data: Vec<Data>
-}
 
 #[derive(Deserialize, Debug)]
-struct Data {
-    city_name: String,
-    country_code: String,
-    datetime: String,
-    timezone: String,
-    weather: Weather,
-    temp: f64,
+struct ConverterResponse {
+    result: String,
+    time_last_update_utc: String,
+    time_next_update_utc: String,
+    base_code: String,
+    target_code: String,
+    conversion_rate: f64
 }
 
 
-#[derive(Deserialize, Debug)]
-struct Weather {
-    description: String
-}
-
-fn get_weather_info(longitude: &f64, latitude: &f64, api_key: &str) -> Result<WeatherResponse, reqwest::Error> {
-    
+fn get_currency(apikey: &str, base_currency: &str, target_currency: &str) -> Result<ConverterResponse, reqwest::Error> {
     let url = format!(
-        "https://weatherbit-v1-mashape.p.rapidapi.com/current?lon={}&lat={}&units=metric&lang=en",
-        longitude, latitude
+        "https://v6.exchangerate-api.com/v6/{}/pair/{}/{}",
+        apikey,
+        base_currency.trim().to_uppercase(),
+        target_currency.trim().to_uppercase()
     );
 
     let client = Client::new();
+    let response = client.get(&url).send()?.error_for_status()?;
 
-    let mut headers = HeaderMap::new();
-    headers.insert("x-rapidapi-key", HeaderValue::from_str(api_key).unwrap());
-    headers.insert("x-rapidapi-host", HeaderValue::from_static("weatherbit-v1-mashape.p.rapidapi.com"));
-
-
-     let response = client
-     .get(&url)
-     .headers(headers)
-     .send()?
-     .json::<WeatherResponse>()?;
-
-    Ok(response)
-
+    // Deserialize the response into the `ConverterResponse` struct
+    let parsed_response: ConverterResponse = response.json()?;
+    Ok(parsed_response)
 }
 
-
-fn display_weather_info(response: &WeatherResponse) {
-    let description = &response.data[0].weather.description;
-    let city_name = &response.data[0].city_name;
-    let country_code = &response.data[0].country_code;
-    let temp = response.data[0].temp;
-    let timezone = &response.data[0].timezone;
-    let datetime = &response.data[0].datetime;
-
-    let weather_text = format!(
-        "description of weather: {}, {},
-        > Temperature: {:.2}°C, 
-        > country code: {}, 
-        > city name: {}, 
-        > timezone: {},
-        > datetime: {}",
-        description,
-        get_temperature_emoji(temp),
-        temp,
-        country_code,
-        city_name,
-        timezone,
-        datetime
-        );
-
-
-        // Coloring the weather text based on weather conditions
-    let weather_text_colored = match description.as_str() {
-        "clear sky" => weather_text.bright_yellow(),
-        "few clouds" | "scattered clouds" | "broken clouds" => weather_text.bright_blue(),
-        "overcast clouds" | "mist" | "haze" | "smoke" | "sand" | "dust" | "fog" | "squalls" => weather_text.dimmed(),
-        "shower rain" | "rain" | "thunderstorm" | "snow" => weather_text.bright_cyan(),
-        _ => weather_text.normal(),
-    };
-
-    println!("{}", weather_text_colored);
-
-}
-
-fn get_temperature_emoji(temperature: f64) -> &'static str {
-    if temperature < 0.0 {
-        "❄️"
-    } else if temperature >= 0.0 && temperature < 10.0 {
-        "☁️"
-    } else if temperature >= 10.0 && temperature < 20.0 {
-        "⛅"
-    } else if temperature >= 20.0 && temperature < 30.0 {
-        "🌤️"
-    } else {
-        "🔥"
-    }
-}
 
 fn main() {
     dotenv().ok();
-    println!("{}", "Welcome to our Weather information application - Joshua Uwakwe".bright_red());
+    println!("{}", "Welcome to Currency converter CLI".bright_white());
+
 
     loop {
-        println!("{}", "there are basically 2 informations i need from you, longitude and latitude 😤".bright_green());
-        println!("{}", "first kindly provide the longitude".bright_white());
-        let mut longitude_input = String::new();
+        println!("kindly provide the base currency");
+
+        let mut base_currency = String::new();
+        
         io::stdin()
-        .read_line(&mut longitude_input)
-        .expect("Failed to read input");
+        .read_line(&mut base_currency)
+        .expect("failed to read provided value");
 
-        let longitude: f64 = match longitude_input.trim().parse() {
-            Ok(value) => value,
-            Err(_) => {
-                eprintln!("Invalid input, please enter a valid floating point number");
-                continue;
-            }
-        };
 
-        println!("{}", "kindly provide the latitude".bright_white());
-        let mut latitude_input = String::new();
+        println!("kindly provide the target currency");
+
+        let mut target_currency = String::new();
+
         io::stdin()
-        .read_line(&mut latitude_input)
-        .expect("Failed to read input");
-
-        let latitude: f64 = match latitude_input.trim().parse() {
-            Ok(value) => value,
-            Err(_) => {
-                eprintln!("Invalid input, please enter a valid floating point number");
-                continue;
-            }
-        };
+        .read_line(&mut target_currency)
+        .expect("failed to read provided value");
 
         let api_key = env::var("API_KEY").expect("API key not found");
 
-        match get_weather_info(&longitude, &latitude, &api_key) {
+        match get_currency(&api_key, &base_currency, &target_currency) {
             Ok(response) => {
-                display_weather_info(&response);
+                println!("{}", "API Response".bright_blue());
+                println!("{:?}", response);
             }
             Err(err) => {
                 eprintln!("Error: {}", err);
             }
         }
 
-        println!("Do you want to enter another set of coordinates? (yes/no):");
-        let mut again = String::new();
-        io::stdin()
-            .read_line(&mut again)
-            .expect("Failed to read input");
-        if again.trim().to_lowercase() != "yes" {
-            println!("Thanks for using our Software! Goodbye!");
-            break;
-        }
 
+        println!("Do you want to get another converter info? (yes/no):");
+            let mut again = String::new();
+            io::stdin()
+                .read_line(&mut again)
+                .expect("Failed to read input");
+            if again.trim().to_lowercase() != "yes" {
+                println!("Thanks for using our Software! Goodbye!");
+                break;
+            }
     }
+
 }
